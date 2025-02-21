@@ -2,8 +2,10 @@ use std::{collections::HashMap, error::Error, fs};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tracing::{info, error};
+use tracing_subscriber;
 
-const LAST_IP_FILE: &str = "last_ips.txt";
+const LAST_IP_FILE: &str = "last_ips.json";
 
 #[derive(Deserialize)]
 struct Config {
@@ -153,10 +155,10 @@ async fn update_dns_record(
         .await?;
 
     if response.success {
-        println!("✅ Updated DNS record for {} to {}", record.dns_name, ip);
+        info!("✅ Updated DNS record for {} to {}", record.dns_name, ip);
         Ok(())
     } else {
-        println!("Failed to update DNS record: {:?}", response.errors);
+        error!("Failed to update DNS record: {:?}", response.errors);
         Err("Cloudflare API error".into())
     }
 }
@@ -181,10 +183,14 @@ fn load_config() -> Result<Config, Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt()
+    .with_max_level(tracing::Level::INFO)
+    .init();
+
     let config = match load_config() {
         Ok(cfg) => cfg,
         Err(e) => {
-            eprintln!("Failed to load config: {:?}", e);
+            error!("Failed to load config: {:?}", e);
             return;
         }
     };
@@ -198,7 +204,7 @@ async fn main() {
     for record in &config.dns_records {
         let domain_parts: Vec<&str> = record.dns_name.split('.').collect();
         if domain_parts.len() < 2 {
-            eprintln!("Invalid domain name: {}", record.dns_name);
+            error!("Invalid domain name: {}", record.dns_name);
             continue;
         }
 
@@ -211,7 +217,7 @@ async fn main() {
         let zone_id = match get_zone_id(&client, &config.api_token, &domain).await {
             Ok(id) => id,
             Err(e) => {
-                eprintln!("Failed to get zone ID for {}: {:?}", domain, e);
+                error!("Failed to get zone ID for {}: {:?}", domain, e);
                 continue;
             }
         };
@@ -222,7 +228,7 @@ async fn main() {
             match get_record_id(&client, &config.api_token, &zone_id, &record.dns_name).await {
                 Ok(id) => id,
                 Err(e) => {
-                    eprintln!("Failed to get record ID for {}: {:?}", record.dns_name, e);
+                    error!("Failed to get record ID for {}: {:?}", record.dns_name, e);
                     continue;
                 }
             };
@@ -237,7 +243,7 @@ async fn main() {
                     let last_ip = last_ips.get(&record.dns_name).and_then(|v| v.as_str());
 
                     if last_ip != Some(&current_ip) {
-                        println!(
+                        info!(
                             "IP has changed to {}, updating dns for {}...",
                             current_ip, record.dns_name
                         );
@@ -256,7 +262,7 @@ async fn main() {
                             last_ips[&record.dns_name] = serde_json::json!(current_ip);
                         }
                     } else {
-                        println!(
+                        info!(
                             "IP has not changed for {}, skipping update",
                             record.dns_name
                         );
@@ -265,7 +271,7 @@ async fn main() {
 
                 save_last_ips(&last_ips);
             }
-            Err(e) => println!("Failed to get public IP: {:?}", e),
+            Err(e) => error!("Failed to get public IP: {:?}", e),
         }
 
         tokio::time::sleep(std::time::Duration::from_secs(config.check_interval)).await;

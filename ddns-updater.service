@@ -1,0 +1,14 @@
+[Unit]
+Description=Cloudflare DDNS Updater
+After=network.target
+
+[Service]
+ExecStart=/usr/local/bin/ddns-updater
+Restart=always
+User=yourusername
+Group=yourgroup
+StandardOutput=syslog
+StandardError=syslog
+
+[Install]
+WantedBy=multi-user.target
