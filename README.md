@@ -18,3 +18,20 @@ proxied = false
 dns_name = "your.domain2.com"
 proxied = true
 ```
+
+## Installation
+Clone repo.
+
+```
+cargo build --release
+sudo mv target/release/ddns-updater /usr/local/bin/
+sudo mv ddns-updater.service /etc/systemd/system/ddns-updater.service
+```
+
+Run service
+```
+sudo systemctl daemon-reload
+sudo systemctl enable ddns-updater
+sudo systemctl start ddns-updater
+```
+
